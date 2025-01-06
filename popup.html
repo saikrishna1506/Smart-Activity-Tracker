@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Activity Tracker</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 600px; /* Set a fixed width for the popup */
+      height: auto; /* Auto height based on content */
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      font-size: 18px;
+      text-align: center;
+    }
+    .category {
+      margin: 10px 0;
+      padding: 5px;
+      border: 1px solid #ccc;
+    }
+    .bar {
+      height: 20px;
+      margin: 16px 0;
+      padding: 5px;
+      background-color: #4caf50;
+      /* margin: 5px 0; */
+    }
+    #barGraph {
+      
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Activity Tracker</h1>
+  <div id="activity"></div>
+  <h2>Watch Time Bar Graph</h2>
+  <div id="barGraph"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
