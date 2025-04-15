@@ -1,52 +1,70 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smart Activity Tracker</title>
   <style>
-    body {
-      margin: 10px;
-      font-family: Arial, sans-serif;
-      width: 300px;
-    }
-    h1 {
-      font-size: 18px;
-      text-align: center;
-    }
-    .category {
+    body { font-family: Arial, sans-serif; padding: 10px; width: 350px; }
+    #nudge {
       margin: 10px 0;
-      padding: 5px;
-      border: 1px solid #ccc;
-      background-color: #f9f9f9;
+      background: #eee;
+      padding: 10px;
+      border-radius: 5px;
     }
-    .bar {
-      height: 20px;
-      background-color: #4caf50;
-      text-align: center;
-      color: white;
-      margin-top: 5px;
-    }
-    #barGraph {
+    button {
       margin-top: 10px;
-    }
-    #clearDataBtn {
-      background-color: red;
+      padding: 8px;
+      width: 100%;
+      background-color: #4caf50;
       color: white;
       border: none;
-      padding: 10px;
-      width: 100%;
       cursor: pointer;
+    }
+    .section {
+      margin-top: 15px;
+    }
+    .log-entry {
+      font-size: 14px;
+      margin-bottom: 6px;
+      padding: 6px;
+      border-bottom: 1px solid #ddd;
+    }
+    .title { font-weight: bold; }
+    .category { font-style: italic; color: gray; }
+    #toast {
+      display: none;
+      background: #f44336;
+      color: white;
+      padding: 8px;
+      border-radius: 4px;
       margin-top: 10px;
+    }
+    #intervalInput {
+      width: 60px;
+      margin-left: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>Activity Tracker</h1>
-  <div id="activity"></div>
-  <h2>Watch Time Graph</h2>
-  <div id="barGraph"></div>
-  <button id="clearDataBtn">Clear Data</button>
+  <h2>🧠 AI Nudge</h2>
+  <div id="nudge">Waiting for update...</div>
+  <button id="refreshBtn">Refresh Nudge</button>
+  <div id="toast"></div>
+
+  <div class="section">
+    <h3>🕒 Nudge Interval</h3>
+    <label>Minutes: <input type="number" id="intervalInput" min="1" value="1" /></label>
+    <button id="saveIntervalBtn">Save Interval</button>
+  </div>
+
+  <div class="section">
+    <h3>🧾 Recent Activity</h3>
+    <div id="activityLog"></div>
+  </div>
+
+  <div class="section">
+    <h3>📺 YouTube Summary</h3>
+    <div id="youtubeSummary"></div>
+  </div>
 
   <script src="popup.js"></script>
 </body>

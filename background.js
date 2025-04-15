@@ -1,129 +1,277 @@
-console.log("Background script loaded.");
+console.log("[BG] Background loaded");
 
-// Store active video details
+// ========== CONFIG ==========
+const NUDGE_INTERVAL_MINUTES = 1;
+const MAX_HISTORY = 10;
+const AI_API_KEY = "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";
+const MODEL = "nvidia/llama-3.1-nemotron-nano-8b-v1:free";
+const YOUTUBE_API_KEY = "AIzaSyDUzuIanvjZCfSB-CzwOwT1ZX_cxuWHEBI"; // YouTube API Key
+
+let activityLog = [];
 let activeVideoId = null;
 let startTime = null;
-let lastLoggedTime = 0; // Prevents multiple loggings
+let lastLoggedTime = 0;
 
-// Function to fetch video details using YouTube API
-async function fetchVideoDetails(videoId) {
-  console.log(`Fetching details for video ID: ${videoId}`);
+// ========== COMMON FUNCTIONS ==========
 
-  const apiKey = 'AIzaSyDUzuIanvjZCfSB-CzwOwT1ZX_cxuWHEBI'; // Replace with your actual API key
-  const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
+function logActivity(url, title) {
+  const log = { url, title, timestamp: Date.now() };
+  activityLog.push(log);
+  if (activityLog.length > MAX_HISTORY) activityLog.shift();
 
-  try {
-    const response = await fetch(url);
-    console.log("API request sent.");
-
-    const data = await response.json();
-    console.log("API response received:", data);
-
-    if (data.items && data.items.length > 0) {
-      const videoDetails = data.items[0].snippet;
-      console.log("Video details fetched:", videoDetails);
-
-      return {
-        videoId: videoId,
-        title: videoDetails.title,
-        category: videoDetails.categoryId || "Unknown", // Handle missing category
-      };
-    } else {
-      console.warn("No video found for ID:", videoId);
-      return null;
-    }
-  } catch (error) {
-    console.error("Error fetching video details:", error);
-    return null;
-  }
+  chrome.storage.local.set({ activityLog }, () => {
+    console.log("[BG] Stored activity:", log);
+  });
 }
 
-// Function to update watch time in storage
-function updateWatchTime(videoId, category, watchTime) {
-  if (watchTime < 2) {
-    console.log(`Ignoring watch time <2s for video ${videoId}`);
-    return; // Prevents accidental miscounting
-  }
+function showToastOnTab(message) {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs.length) return;
+    const tabId = tabs[0].id;
 
-  chrome.storage.local.get(["categoryData"], (data) => {
-    let categoryData = data.categoryData || {};
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: (msg) => {
+        if (document.getElementById("smart-toast")) return;
+        const toast = document.createElement("div");
+        toast.id = "smart-toast";
+        toast.innerText = msg;
 
-    // Ensure category exists in storage
-    if (!categoryData[category]) {
-      categoryData[category] = { count: 0, totalWatchTime: 0 };
-    }
+        toast.style.cssText = `
+          position: fixed;
+          top: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #1e1e1e;
+          color: white;
+          padding: 14px 24px;
+          border-radius: 12px;
+          font-size: 16px;
+          z-index: 999999;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+          opacity: 0;
+          transition: opacity 0.3s ease;
+          max-width: 90%;
+          text-align: center;
+        `;
 
-    // Update only if it's a valid session
-    if (videoId !== activeVideoId) {
-      categoryData[category].count += 1;
-    }
+        const progressBar = document.createElement("div");
+        progressBar.style.cssText = `
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          height: 4px;
+          width: 100%;
+          background: #00bfff;
+          transform-origin: left;
+          animation: toast-progress 20s linear forwards;
+        `;
+        toast.appendChild(progressBar);
 
-    // Add watch time
-    categoryData[category].totalWatchTime += watchTime;
+        const style = document.createElement("style");
+        style.textContent = `
+          @keyframes toast-progress {
+            from { transform: scaleX(1); }
+            to { transform: scaleX(0); }
+          }
+        `;
+        document.head.appendChild(style);
 
-    console.log(`Updated category data for ${category}:`, categoryData[category]);
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => toast.style.opacity = "1");
 
-    // Save the updated category data
-    chrome.storage.local.set({ categoryData: categoryData }, () => {
-      console.log("Data successfully saved in local storage.");
+        setTimeout(() => {
+          toast.style.opacity = "0";
+          setTimeout(() => {
+            toast.remove();
+            style.remove();
+          }, 500);
+        }, 20000);
+      },
+      args: [message]
+    }, () => {
+      if (chrome.runtime.lastError) {
+        console.error("Toast injection error:", chrome.runtime.lastError.message);
+      } else {
+        console.log("[BG] Toast injected successfully.");
+      }
     });
   });
 }
 
-// Listen for when a new YouTube video is opened
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.url && changeInfo.url.includes("youtube.com/watch")) {
-    console.log("YouTube video detected:", changeInfo.url);
+// ========== YOUTUBE TRACKING ==========
 
-    const videoId = new URLSearchParams(new URL(changeInfo.url).search).get("v");
-    console.log("Extracted video ID:", videoId);
+async function fetchVideoDetails(videoId) {
+  const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.items && data.items.length > 0) {
+      const snippet = data.items[0].snippet;
+      return {
+        videoId,
+        title: snippet.title,
+        category: snippet.categoryId || "Unknown"
+      };
+    }
+  } catch (err) {
+    console.error("[BG] Failed to fetch video details:", err);
+  }
+  return null;
+}
 
-    if (videoId && videoId !== activeVideoId) {
-      fetchVideoDetails(videoId).then((activity) => {
-        if (activity) {
-          console.log("Activity fetched:", activity);
+function updateWatchTime(videoId, category, watchTime) {
+  if (watchTime < 2) return;
 
-          // Log previous video watch time
-          if (activeVideoId && startTime) {
-            let watchDuration = Math.floor((Date.now() - startTime) / 1000); // Convert to seconds
-            console.log(`Switching videos. Updating watch time: ${watchDuration} seconds`);
+  chrome.storage.local.get(["categoryData"], (data) => {
+    let categoryData = data.categoryData || {};
 
-            updateWatchTime(activeVideoId, activity.category, watchDuration);
+    if (!categoryData[category]) {
+      categoryData[category] = { count: 0, totalWatchTime: 0 };
+    }
+
+    if (videoId !== activeVideoId) {
+      categoryData[category].count += 1;
+    }
+
+    categoryData[category].totalWatchTime += watchTime;
+
+    chrome.storage.local.set({ categoryData }, () => {
+      console.log("[BG] Updated YouTube category:", category, categoryData[category]);
+    });
+  });
+}
+
+// ========== AI NUDGE ==========
+
+async function fetchAINudge(logs) {
+  const prompt =
+    `Based on the recent web pages the user visited, identify if the activity is productive (e.g., learning, coding, researching etc) or unproductive (e.g., social media, entertainment, etc). For prodictive tasks encouraging messages to the user and for unproductive tasks give a motivational message.Just give the nudge only no extra content/message.\n\n` +
+    // `Then generate a short 1-line motivational nudge to help the user stay focused.Just give the nudge only no extra content/message.\n\n` +
+    logs.map((l, i) => `${i + 1}. ${l.title} (${l.url})`).join("\n");
+// logs.map((l, i) => console.log(`[${i + 1}] ${l.title} (${l.url})`));
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${AI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "You are a productivity assistant that nudges users based on recent browsing activity."
+          },
+          {
+            role: "user",
+            content: prompt
           }
+        ]
+      })
+    });
 
-          // Start tracking new video
-          activeVideoId = videoId;
-          startTime = Date.now();
-          lastLoggedTime = 0;
-        } else {
-          console.warn("No activity data returned.");
-        }
-      });
+    const data = await res.json();
+
+    if (res.status === 429 || data.error) {
+      const errMsg = data?.error?.message || "Rate limit or API error.";
+      console.error("[BG] AI error:", errMsg);
+      showToastOnTab(errMsg);
+      return;
+    }
+
+    const message = data.choices?.[0]?.message?.content || "Stay focused!";
+    chrome.storage.local.set({ lastNudge: message });
+    chrome.runtime.sendMessage({ type: "NUDGE", nudge: message });
+    showToastOnTab("✅ AI Nudge: " + message);
+  } catch (err) {
+    console.error("[BG] AI nudge fetch failed:", err);
+    showToastOnTab("AI fetch error: " + err.message);
+  }
+}
+
+// ========== LISTENERS ==========
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete" && tab.url?.startsWith("http")) {
+    logActivity(tab.url, tab.title || "Untitled");
+
+    // YouTube detection
+    if (tab.url.includes("youtube.com/watch")) {
+      const videoId = new URLSearchParams(new URL(tab.url).search).get("v");
+      if (videoId && videoId !== activeVideoId) {
+        fetchVideoDetails(videoId).then((activity) => {
+          if (activity) {
+            if (activeVideoId && startTime) {
+              let watchDuration = Math.floor((Date.now() - startTime) / 1000);
+              updateWatchTime(activeVideoId, activity.category, watchDuration);
+            }
+            activeVideoId = videoId;
+            startTime = Date.now();
+            lastLoggedTime = 0;
+          }
+        });
+      }
     }
   }
 });
 
-// Listen for tab closure (to track the final watch time)
-chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+chrome.tabs.onRemoved.addListener((tabId) => {
   if (activeVideoId && startTime) {
-    let watchDuration = Math.floor((Date.now() - startTime) / 1000); // Convert to seconds
-
-    if (watchDuration > lastLoggedTime) { // Prevent duplicate logging
-      console.log(`YouTube tab closed. Updating watch time: ${watchDuration} seconds`);
-
+    let watchDuration = Math.floor((Date.now() - startTime) / 1000);
+    if (watchDuration > lastLoggedTime) {
       fetchVideoDetails(activeVideoId).then((activity) => {
         if (activity) {
           updateWatchTime(activeVideoId, activity.category, watchDuration);
         }
       });
-
       lastLoggedTime = watchDuration;
     }
-
-    // Reset active video tracking
     activeVideoId = null;
     startTime = null;
   }
 });
 
-console.log("Background script execution completed.");
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "REFRESH_NUDGE") {
+    chrome.storage.local.get("activityLog", (data) => {
+      const logs = data.activityLog || [];
+      if (logs.length > 0) fetchAINudge(logs.slice(-MAX_HISTORY));
+    });
+  }
+});
+
+let intervalId = null;
+
+function startNudgeInterval() {
+  if (intervalId) clearInterval(intervalId);
+
+  chrome.storage.local.get("nudgeInterval", (data) => {
+    const intervalMin = data.nudgeInterval || 1;
+
+    intervalId = setInterval(() => {
+      chrome.storage.local.get("activityLog", (res) => {
+        const logs = res.activityLog || [];
+        if (logs.length > 0) {
+          fetchAINudge(logs.slice(-MAX_HISTORY));
+        }
+      });
+    }, intervalMin * 60 * 1000);
+
+    console.log(`[BG] Nudge interval started: Every ${intervalMin} min(s)`);
+  });
+}
+
+// Start on load
+startNudgeInterval();
+
+// React when user updates interval via popup
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (changes.nudgeInterval) {
+    console.log("[BG] Nudge interval updated by user:", changes.nudgeInterval.newValue);
+    showToastOnTab("✅ Interval updated to " + changes.nudgeInterval.newValue + " min");
+    startNudgeInterval();
+  }
+});
+

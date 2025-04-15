@@ -1,16 +1,24 @@
+
 {
   "manifest_version": 3,
   "name": "Smart Activity Tracker",
-  "version": "1.0",
-  "description": "Track your YouTube activity and watch time by category.",
+  "version": "1.1",
+  "description": "Track your YouTube activity and get AI-powered productivity nudges.",
   "permissions": [
-    "storage",
-    "tabs",
-    "activeTab"
+    "notifications",
+  "storage",
+  "tabs",
+  "activeTab",
+  "scripting"
   ],
   "background": {
     "service_worker": "background.js"
   },
+"host_permissions": [
+  "http://*/*",
+  "https://*/*"
+],
+
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
