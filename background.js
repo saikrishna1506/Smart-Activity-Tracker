@@ -12,8 +12,8 @@ const YT_CATEGORY_MAP = {
 
 const NUDGE_INTERVAL_MINUTES = 1;
 const MAX_HISTORY = 10;
-const AI_API_KEY = "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";
-const MODEL = "nvidia/llama-3.1-nemotron-nano-8b-v1:free";
+const AI_API_KEY = "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";
+const MODEL = "nvidia/llama-3.1-nemotron-ultra-253b-v1:free";
 const YOUTUBE_API_KEY = "AIzaSyDUzuIanvjZCfSB-CzwOwT1ZX_cxuWHEBI";
 
 let activityLog = [];
@@ -160,7 +160,7 @@ Then generate one single short nudge message to match:
 - If the user is distracted, gently motivate them to refocus. Make it witty, casual, or slightly humorous. Add an emoji at the end.
 - If the user is focused, acknowledge it and cheer them on — no fluff, just short encouragement. Add an emoji.
 
-Do not mention the sites by name or explain the user's behavior.
+Do not mention the explaination of the user's behavior only nudge!!.
 Do not generate two messages. Pick only one based on the overall pattern.
 Limit to 1 sentence. Keep it casual and conversational.\n\n` +
     logs.map((l, i) => `${i + 1}. ${l.title} (${l.url})`).join("\n");
@@ -174,7 +174,7 @@ Limit to 1 sentence. Keep it casual and conversational.\n\n` +
       body: JSON.stringify({
         model: MODEL,
         messages: [
-          { role: "system", content: "You are a productivity assistant that nudges users based on recent browsing activity. with 1 or 2 line" },
+          { role: "system", content: "You are a productivity assistant that nudges users based on recent browsing activity. Do not mention the explaination, only nudge!!." },
           { role: "user", content: prompt }
         ]
       })
